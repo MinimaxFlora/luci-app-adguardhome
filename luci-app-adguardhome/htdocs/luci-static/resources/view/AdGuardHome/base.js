@@ -2,7 +2,6 @@
 
 'require fs';
 'require uci';
-'require ui';
 'require dom';
 'require poll';
 'require form';
@@ -264,6 +263,12 @@ var UpdateCore = form.DummyValue.extend({
  * `luasrc/view/AdGuardHome/AdGuardHome_chpass.htm` (bcrypt password hashing).
  */
 var ChpassValue = form.Value.extend({
+	/* 不回显 UCI 中残留的旧哈希:密码输入框始终从空白开始,
+	 * 与其它 LuCI 应用的密码框行为一致 */
+	cfgvalue: function(section_id) {
+		return '';
+	},
+
 	renderWidget: function(section_id, option_index, cfgvalue) {
 		var self = this;
 		var input = form.Value.prototype.renderWidget.apply(this, arguments);
@@ -584,21 +589,6 @@ return view.extend({
 				E('fieldset', { 'class': 'cbi-section' }, statusP),
 				node
 			]);
-		});
-	},
-
-	handleSaveApply: function(ev, mode) {
-		return this.handleSave(ev).then(function() {
-			ui.changes.apply(mode == '0');
-
-			/* 原版 base.lua 的 m.on_commit 会在 UCI commit 后显式
-			 * reload（io.popen "/etc/init.d/AdGuardHome reload &"），
-			 * 确保服务按新的 enabled 状态启动/停止。这里在标准
-			 * 保存并应用（90 秒回滚倒计时）之后延迟触发同样的 reload，
-			 * 避免只依赖 procd reload trigger 导致服务不启动。 */
-			window.setTimeout(function() {
-				fs.exec('/etc/init.d/AdGuardHome', ['reload']).catch(function() {});
-			}, 5000);
 		});
 	}
 });

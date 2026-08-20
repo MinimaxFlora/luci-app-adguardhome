@@ -363,7 +363,8 @@ start_service() {
 	config_get configpath $CONFIGURATION configpath "/etc/AdGuardHome.yaml"
 	if [ -n "$hashpass" ]; then
 		config_editor "users.password" "$hashpass" "$configpath"
-		uci set $CONFIGURATION.$CONFIGURATION.hashpass=""
+		uci -q delete $CONFIGURATION.$CONFIGURATION.hashpass
+		uci commit $CONFIGURATION
 	fi
 	local ipst=0
 	config_get_bool enabled $CONFIGURATION enabled 0
@@ -469,7 +470,17 @@ reload_service()
 {
 	rm /var/run/AdGlucitest >/dev/null 2>&1
 	echo "AdGuardHome reloading"
-	start
+	config_load "${CONFIGURATION}"
+	config_get_bool enabled $CONFIGURATION enabled 0
+	if [ "$enabled" == "1" ]; then
+		# 轻量重启:绕过 stop_service(跳过备份和 redirect 清理,
+		# 避免 rpcd 保存并应用时同步等待 dnsmasq/firewall 重启)。
+		# procd 同名实例会直接替换运行中的进程;redirect 相关调整
+		# 由 start_service 末尾的后台任务 (sleep 5 && _do_redirect 1) 完成。
+		rc_procd start_service
+	else
+		stop_service nobackup
+	fi
 }
 
 del_querylog(){
