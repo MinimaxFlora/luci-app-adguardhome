@@ -23,12 +23,12 @@ beta)
 esac
 
 Check_Task(){
-	running_tasks="$(ps -efww  | grep -v grep | grep "AdGuardHome" | grep "update_core" | awk '{print $1}' | wc -l)"
+	running_tasks="$(ps w 2>/dev/null | grep -v grep | grep "AdGuardHome" | grep "update_core" | awk '{print $1}' | wc -l)"
 	case $1 in
 	force)
 		echo -e "执行: 强制更新核心"
 		echo -e "清除 ${running_tasks} 个进程 ..."
-		ps -efww  | grep -v grep | grep -v $$ | grep "AdGuardHome" | grep "update_core" | awk '{print $1}' | xargs kill -9 2> /dev/null
+		ps w 2>/dev/null | grep -v grep | grep -v $$ | grep "AdGuardHome" | grep "update_core" | awk '{print $1}' | xargs kill -9 2> /dev/null
 	;;
 	*)
 		[[ ${running_tasks} -gt 2 ]] && echo -e "已经有 ${running_tasks} 个任务正在运行, 请等待其执行结束或将其强行停止!" && EXIT 2
@@ -88,7 +88,16 @@ UPX_Compress(){
 	else
 		echo -e "\n${upx_name} 下载成功!\n" 
 	fi
-	which xz > /dev/null 2>&1 || (opkg list | grep ^xz || opkg update > /dev/null 2>&1 && opkg install xz --force-depends) || (echo "软件包 xz 安装失败!" && EXIT 1)
+	if ! which xz > /dev/null 2>&1; then
+		if command -v opkg >/dev/null 2>&1; then
+			opkg list 2>/dev/null | grep -q '^xz' || { opkg update >/dev/null 2>&1 && opkg install xz --force-depends; }
+		elif command -v apk >/dev/null 2>&1; then
+			apk add xz >/dev/null 2>&1
+		else
+			echo "软件包 xz 安装失败!" && EXIT 1
+		fi
+		which xz >/dev/null 2>&1 || { echo "软件包 xz 安装失败!" && EXIT 1; }
+	fi
 	mkdir -p /tmp/upx-${upx_latest_ver}-${Arch_upx}_linux
 	echo -e "正在解压 ${upx_name} ...\n" 
 	xz -d -c /tmp/upx-${upx_latest_ver}-${Arch_upx}_linux.tar.xz | tar -x -C "/tmp"
@@ -100,6 +109,7 @@ Update_Core(){
 	mkdir -p "/tmp/AdGuardHome_Update"
 	
 	Arch=$(GET_Arch )
+	[ -z "${Arch}" ] && echo -e "\n无法识别设备架构, 核心更新失败!" && EXIT 1
 	eval link=$(uci get AdGuardHome.AdGuardHome.update_url 2>/dev/null)
 	echo -e "下载链接:${link}"
 	echo -e "文件名称:${link##*/}"
@@ -153,7 +163,17 @@ Update_Core(){
 }
 
 GET_Arch() {
-	Archt="$(opkg info kernel | grep Architecture | awk -F "[ _]" '{print($2)}')"
+	local Archt=""
+	# 兼容 opkg(OpenWrt<24.10) 与 apk(OpenWrt>=24.10) 两种包管理器, 并兜底读取系统架构
+	if command -v opkg >/dev/null 2>&1; then
+		Archt="$(opkg info kernel 2>/dev/null | grep Architecture | awk -F "[ _]" '{print($2)}')"
+	elif [ -f /etc/apk/arch ]; then
+		Archt="$(head -n1 /etc/apk/arch 2>/dev/null | awk -F "_" '{print $1}')"
+	fi
+	if [ -z "${Archt}" ]; then
+		Archt="$(cat /etc/openwrt_release /etc/os-release /usr/lib/os-release 2>/dev/null | grep -m1 -E '^(DISTRIB_ARCH|OPENWRT_ARCH)=' | cut -d= -f2 | tr -d "'\"" | cut -d_ -f1)"
+	fi
+	[ -z "${Archt}" ] && Archt="$(uname -m | cut -d_ -f1)"
 	case "${Archt}" in
 	"i386")
 		Arch="386"
@@ -170,7 +190,7 @@ GET_Arch() {
 	"mips64el")
 		Arch="mips64le"
 		Arch="mipsle"
-		echo -e "mips64el use $Arch may have bug"
+		echo -e "mips64el use $Arch may have bug" >&2
 	;;
 	"mips")
 		Arch="mips"
@@ -178,7 +198,7 @@ GET_Arch() {
 	"mips64")
 		Arch="mips64"
 		Arch="mips"
-		echo -e "mips64 use $Arch may have bug"
+		echo -e "mips64 use $Arch may have bug" >&2
 	;;
 	"arm")
 		Arch="arm"
@@ -188,17 +208,17 @@ GET_Arch() {
 		;;
 	"powerpc")
 		Arch="ppc"
-		echo -e "error not support $Archt"
+		echo -e "error not support $Archt" >&2
 		EXIT 1
 		;;
 	"powerpc64")
 		Arch="ppc64"
-		echo -e "error not support $Archt"
+		echo -e "error not support $Archt" >&2
 		EXIT 1
 		;;
 
 	*)
-		echo -e "error not support $Archt if you can use offical release please issue a bug"
+		echo -e "error not support $Archt if you can use offical release please issue a bug" >&2
 		EXIT 1
 		;;
 	esac
