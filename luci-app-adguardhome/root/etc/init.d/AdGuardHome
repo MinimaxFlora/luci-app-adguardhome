@@ -479,7 +479,12 @@ reload_service()
 		# 由 start_service 末尾的后台任务 (sleep 5 && _do_redirect 1) 完成。
 		rc_procd start_service
 	else
+		# 停用:清理 redirect/crontab(跳过备份),然后必须显式删除
+		# procd 实例(不能写成 `stop nobackup` —— rc.common 会把
+		# nobackup 当作 instance 名传给 procd_kill,实例删不掉,
+		# 进程会继续运行)
 		stop_service nobackup
+		procd_kill "$CONFIGURATION"
 	fi
 }
 
