@@ -581,7 +581,11 @@ return view.extend({
 	 */
 	handleSave: function(ev) {
 		return this.super('handleSave', [ev]).then(function() {
-			return sh('/etc/init.d/AdGuardHome reload >/dev/null 2>&1 &');
+			// 发后即忘：不要 return/await 这个调用，否则 fs.exec 等管道 EOF 回包
+			// 可能迟迟不返回，会卡住「保存并应用」的 handleSaveApply，倒计时框出不来。
+			// >/dev/null 2>&1 & 让 reload 真正脱离且不占用 rpcd 输出管道（对应原版
+			// base.lua 的 io.popen("/etc/init.d/AdGuardHome reload &")）。
+			sh('/etc/init.d/AdGuardHome reload >/dev/null 2>&1 &').catch(function() {});
 		});
 	}
 });
