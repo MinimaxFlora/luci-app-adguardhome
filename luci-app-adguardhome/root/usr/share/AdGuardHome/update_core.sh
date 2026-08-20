@@ -238,6 +238,6 @@ main(){
 
 trap "EXIT 1" SIGTERM SIGINT
 touch /var/run/update_core
-rm - rf /var/run/update_core_error 2>/dev/null
+rm -rf /var/run/update_core_error 2>/dev/null
 
 main

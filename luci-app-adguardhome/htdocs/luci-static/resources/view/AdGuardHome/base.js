@@ -186,7 +186,7 @@ var UpdateCore = form.DummyValue.extend({
 							});
 						}
 
-						logPos += data.length;
+						logPos += new TextEncoder().encode(data).length;
 
 						if (isLogReverse)
 							ta.value = data.split('\n').reverse().join('\n') + ta.value;
@@ -205,8 +205,13 @@ var UpdateCore = form.DummyValue.extend({
 			updateBtn.textContent = _('Check...');
 			forceBtn.style.display = 'inline';
 
+			/* fire-and-forget: 后台启动脚本后立即开始轮询，不要
+			 * .then(pollCheck) 等待 fs.exec 回包 —— fs.exec 会等
+			 * stdout/stderr 管道 EOF，后台子进程若继承管道会导致
+			 * 回包延迟/挂起，进度框就不显示、一直卡在检测中 */
 			sh('sh /usr/share/AdGuardHome/update_core.sh >/tmp/AdGuardHome_update.log 2>&1 &')
-				.then(pollCheck).catch(function() {});
+				.catch(function() {});
+			pollCheck();
 		}
 
 		function applyForceUpdate() {
@@ -216,7 +221,8 @@ var UpdateCore = form.DummyValue.extend({
 			forceBtn.style.display = 'inline';
 
 			sh('kill $(pgrep /usr/share/AdGuardHome/update_core.sh) ; sh /usr/share/AdGuardHome/update_core.sh force >/tmp/AdGuardHome_update.log 2>&1 &')
-				.then(pollCheck).catch(function() {});
+				.catch(function() {});
+			pollCheck();
 		}
 
 		updateBtn.addEventListener('click', applyUpdate);
