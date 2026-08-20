@@ -276,13 +276,22 @@ var ChpassValue = form.Value.extend({
 				return loadScript(L.resource('twin-bcrypt.min.js')).then(function() {
 					b.textContent = _('Culculate');
 					b.disabled = false;
+				}).catch(function() {
+					b.textContent = _('Load culculate model');
+					b.disabled = false;
 				});
 			}
 
-			var lv = document.getElementById(self.cbid(section_id));
-			if (lv.value != '') {
-				lv.value = window.TwinBcrypt.hashSync(lv.value);
-				b.textContent = _('Please save/apply');
+			var lv = self.getUIElement(section_id);
+			var value = lv ? lv.getValue() : '';
+
+			if (value != '') {
+				window.TwinBcrypt.hash(value, function(hash) {
+					var el = self.getUIElement(section_id);
+					if (el)
+						el.setValue(hash);
+					b.textContent = _('Please save/apply');
+				});
 			}
 			else {
 				b.textContent = _('is empty');

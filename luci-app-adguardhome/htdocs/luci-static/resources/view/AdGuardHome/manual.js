@@ -147,7 +147,8 @@ return view.extend({
 		};
 
 		return m.render().then(function(node) {
-			var ta = document.getElementById(o.cbid('AdGuardHome'));
+			var uiel = o.getUIElement('AdGuardHome');
+			var ta = uiel ? uiel.node.firstElementChild : null;
 
 			if (ta && window.CodeMirror) {
 				var editor = window.CodeMirror.fromTextArea(ta, {
