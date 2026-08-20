@@ -1,0 +1,2 @@
+# Force LF line endings for all text files (shell scripts break with CRLF)
+* text eol=lf
