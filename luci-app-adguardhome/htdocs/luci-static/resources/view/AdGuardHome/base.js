@@ -570,5 +570,18 @@ return view.extend({
 				node
 			]);
 		});
+	},
+
+	/*
+	 * 保存后重新加载 AdGuardHome 服务。
+	 *
+	 * 对应原版 base.lua 的 m.on_commit：新版 LuCI 框架里「保存」只会提交 UCI
+	 * 变更、不会自动触发 init.d 脚本，因此必须显式 reload，否则 enabled 开关
+	 * (启动/停止) 不会生效，界面会一直显示「未运行 / 未重定向」。
+	 */
+	handleSave: function(ev) {
+		return this.super('handleSave', [ev]).then(function() {
+			return sh('/etc/init.d/AdGuardHome reload >/dev/null 2>&1 &');
+		});
 	}
 });
