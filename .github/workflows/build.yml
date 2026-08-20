@@ -1,0 +1,156 @@
+name: Build luci-app-adguardhome
+
+on:
+  workflow_dispatch:
+    inputs:
+      plugins:
+        description: 'Input: empty/*=luci-app-adguardhome, 1=updated in 1 day, 2=updated in 2 days, or package name(s)'
+        required: false
+        default: ''
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: build ${{ matrix.arch }}-${{ matrix.sdk }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk:
+          - 24.10.5
+          - 25.12.0
+        # luci-app-adguardhome is PKGARCH:=all (noarch), so one arch is enough —
+        # the _all.ipk/_all.apk works on every target. Use x86_64 (native, no QEMU).
+        # If you later add arch-dependent packages, append e.g. aarch64_cortex-a53.
+        arch:
+          - x86_64
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Get packages to build
+        id: packages
+        run: |
+          input="${{ github.event.inputs.plugins }}"
+
+          if [ -z "$input" ] || [ "$input" == "*" ]; then
+            # default package(s)
+            PACKAGES="luci-app-adguardhome"
+            echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          elif [ "$input" == "1" ]; then
+            PACKAGES=$(git log --since="1 days ago" --name-only --pretty=format: | grep -v '^$' | awk -F'/' '{print $1}' | sort -u | grep -v '^\.\|^$' | while read pkg; do [ -f "$pkg/Makefile" ] && echo "$pkg"; done | tr '\n' ' ' | sed 's/ $//')
+            echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          elif [ "$input" == "2" ]; then
+            PACKAGES=$(git log --since="2 days ago" --name-only --pretty=format: | grep -v '^$' | awk -F'/' '{print $1}' | sort -u | grep -v '^\.\|^$' | while read pkg; do [ -f "$pkg/Makefile" ] && echo "$pkg"; done | tr '\n' ' ' | sed 's/ $//')
+            echo "packages=$PACKAGES" >> $GITHUB_OUTPUT
+          else
+            echo "packages=$input" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build
+        uses: kenzok8/gh-action-sdk@f5813d30eeef3534b58ac7e79c5d8842b6035434
+        env:
+          CONTAINER: immortalwrt/sdk
+          ARCH: ${{ matrix.arch }}-openwrt-${{ matrix.sdk }}
+          FEEDNAME: packages_ci
+          PACKAGES: ${{ steps.packages.outputs.packages }}
+          NO_REFRESH_CHECK: true
+          IGNORE_ERRORS: true
+          INDEX: 1
+
+      - name: Store packages
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: ${{ matrix.arch }}-${{ matrix.sdk }}
+          path: |
+            bin/packages/${{ matrix.arch }}/packages_ci/*.ipk
+            bin/packages/${{ matrix.arch }}/packages_ci/*.apk
+
+      - name: Zip packages
+        run: |
+          shopt -s nullglob
+          packages=(bin/packages/${{ matrix.arch }}/packages_ci/*.ipk bin/packages/${{ matrix.arch }}/packages_ci/*.apk)
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo "No packages found"
+            exit 1
+          fi
+          zip -j ${{ matrix.arch }}-${{ matrix.sdk }}.zip "${packages[@]}"
+          mkdir -p release-assets
+          cp "${packages[@]}" release-assets/
+          cp ${{ matrix.arch }}-${{ matrix.sdk }}.zip release-assets/
+          SDK_MM="${{ matrix.sdk }}"; SDK_MM="${SDK_MM%.*}"
+          case "${{ matrix.sdk }}" in
+            25.*) echo -e "## 📦 SDK ${SDK_MM} (APK)\n" >> release.txt ;;
+            *)    echo -e "## 📦 SDK ${SDK_MM} (IPK)\n" >> release.txt ;;
+          esac
+          echo -e "**luci-app-adguardhome** 🎈 — 新版 LuCI JS 框架的 AdGuard Home 管理界面\n" >> release.txt
+          echo -e "1. 全架构通用 (PKGARCH=all)，一个包适用所有设备\n" >> release.txt
+          case "${{ matrix.sdk }}" in
+            25.*) echo -e "2. immortalwrt ${{ matrix.sdk }} 使用：\`apk add --allow-untrusted ./*.apk\`\n" >> release.txt ;;
+            *)    echo -e "2. immortalwrt ${{ matrix.sdk }} 使用：\`opkg install *.ipk\`\n" >> release.txt ;;
+          esac
+          echo -e "3. AdGuardHome 核心二进制会在首次启用时自动下载（依赖 curl / wget-ssl）\n" >> release.txt
+
+      - name: Upload packages
+        uses: ncipollo/release-action@v1.21.0
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+          artifacts: "release-assets/*"
+          allowUpdates: true
+          replacesArtifacts: true
+          bodyFile: "release.txt"
+          tag: ${{ github.run_number }}-${{ matrix.arch }}-${{ matrix.sdk }}
+
+      - name: Delete workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          REPO: ${{ github.repository }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          RETAIN_DAYS: "10"
+          KEEP_MINIMUM_RUNS: "2"
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d "${RETAIN_DAYS} days ago" +%s)
+          mapfile -t runs < <(gh run list --repo "$REPO" --workflow "$WORKFLOW_NAME" --limit 200 --json databaseId,createdAt --jq '.[] | [.databaseId, .createdAt] | @tsv')
+          total=${#runs[@]}
+          if [ "$total" -le "$KEEP_MINIMUM_RUNS" ]; then
+            echo "No workflow runs to delete ($total <= $KEEP_MINIMUM_RUNS)"
+            exit 0
+          fi
+          index=0
+          for run in "${runs[@]}"; do
+            index=$((index + 1))
+            if [ "$index" -le "$KEEP_MINIMUM_RUNS" ]; then
+              continue
+            fi
+            run_id=${run%%$'\t'*}
+            created_at=${run#*$'\t'}
+            created_epoch=$(date -u -d "$created_at" +%s)
+            if [ "$created_epoch" -gt "$cutoff" ]; then
+              continue
+            fi
+            echo "Deleting workflow run $run_id ($created_at)"
+            gh api --method DELETE "repos/$REPO/actions/runs/$run_id" || true
+          done
+
+      - name: Remove old Releases
+        env:
+          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          REPO: ${{ github.repository }}
+          KEEP: "60"
+        run: |
+          set -euo pipefail
+          mapfile -t tags < <(gh release list --repo "$REPO" --limit 200 --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[].tagName')
+          total=${#tags[@]}
+          if [ "$total" -le "$KEEP" ]; then
+            echo "No old releases to delete ($total <= $KEEP)"
+            exit 0
+          fi
+          for tag in "${tags[@]:$KEEP}"; do
+            echo "Deleting $tag"
+            gh release delete "$tag" --repo "$REPO" --yes --cleanup-tag || true
+          done
