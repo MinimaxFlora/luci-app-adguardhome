@@ -585,5 +585,20 @@ return view.extend({
 				node
 			]);
 		});
+	},
+
+	handleSaveApply: function(ev, mode) {
+		return this.handleSave(ev).then(function() {
+			ui.changes.apply(mode == '0');
+
+			/* 原版 base.lua 的 m.on_commit 会在 UCI commit 后显式
+			 * reload（io.popen "/etc/init.d/AdGuardHome reload &"），
+			 * 确保服务按新的 enabled 状态启动/停止。这里在标准
+			 * 保存并应用（90 秒回滚倒计时）之后延迟触发同样的 reload，
+			 * 避免只依赖 procd reload trigger 导致服务不启动。 */
+			window.setTimeout(function() {
+				fs.exec('/etc/init.d/AdGuardHome', ['reload']).catch(function() {});
+			}, 5000);
+		});
 	}
 });

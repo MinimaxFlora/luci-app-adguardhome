@@ -47,12 +47,12 @@ Check_Updates(){
 	Check_Downloader
 	case "${PKG}" in
 	curl)
-		Downloader="curl -L -k -o"
-		_Downloader="curl -s"
+		Downloader="curl -L -k --connect-timeout 10 -o"
+		_Downloader="curl -s --connect-timeout 10 --max-time 30"
 	;;
 	wget-ssl)
 		Downloader="wget-ssl --no-check-certificate -T 5 -O"
-		_Downloader="wget-ssl -q -O -"
+		_Downloader="wget-ssl -q -T 10 -O -"
 	;;
 	esac
 	echo "[${PKG}] 开始检查更新, 请耐心等待 ..."
