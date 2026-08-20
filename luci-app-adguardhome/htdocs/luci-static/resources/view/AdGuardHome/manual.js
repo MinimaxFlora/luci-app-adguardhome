@@ -112,7 +112,7 @@ return view.extend({
 		o.rows = 66;
 		o.wrap = 'off';
 		o.rmempty = true;
-		o.cfgvalue = function() { return loadConfig(); };
+		o.load = function() { return loadConfig(); };
 
 		o.write = function(section_id, value) {
 			var norm = String(value).replace(/\r\n/g, '\n');
