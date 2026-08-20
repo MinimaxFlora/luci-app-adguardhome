@@ -570,22 +570,5 @@ return view.extend({
 				node
 			]);
 		});
-	},
-
-	/*
-	 * 保存后重新加载 AdGuardHome 服务。
-	 *
-	 * 对应原版 base.lua 的 m.on_commit：新版 LuCI 框架里「保存」只会提交 UCI
-	 * 变更、不会自动触发 init.d 脚本，因此必须显式 reload，否则 enabled 开关
-	 * (启动/停止) 不会生效，界面会一直显示「未运行 / 未重定向」。
-	 */
-	handleSave: function(ev) {
-		return this.super('handleSave', [ev]).then(function() {
-			// 发后即忘：不要 return/await 这个调用，否则 fs.exec 等管道 EOF 回包
-			// 可能迟迟不返回，会卡住「保存并应用」的 handleSaveApply，倒计时框出不来。
-			// >/dev/null 2>&1 & 让 reload 真正脱离且不占用 rpcd 输出管道（对应原版
-			// base.lua 的 io.popen("/etc/init.d/AdGuardHome reload &")）。
-			sh('/etc/init.d/AdGuardHome reload >/dev/null 2>&1 &').catch(function() {});
-		});
 	}
 });
