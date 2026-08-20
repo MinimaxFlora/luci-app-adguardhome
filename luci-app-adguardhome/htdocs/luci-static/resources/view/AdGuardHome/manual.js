@@ -147,10 +147,21 @@ return view.extend({
 		};
 
 		return m.render().then(function(node) {
-			var uiel = o.getUIElement('AdGuardHome');
-			var ta = uiel ? uiel.node.firstElementChild : null;
+			/*
+			 * CodeMirror must be initialized only after the form node has
+			 * been attached to the document. Doing it here (inside the
+			 * m.render() promise) is too early: the container is not yet
+			 * measurable, which renders as a black/empty panel until the
+			 * user clicks into it. Defer via requestAnimationFrame and force
+			 * a refresh once initialized.
+			 */
+			window.requestAnimationFrame(function() {
+				var uiel = o.getUIElement('AdGuardHome');
+				var ta = uiel ? uiel.node.firstElementChild : null;
 
-			if (ta && window.CodeMirror) {
+				if (!ta || !window.CodeMirror)
+					return;
+
 				var editor = window.CodeMirror.fromTextArea(ta, {
 					mode: 'text/yaml',
 					styleActiveLine: true,
@@ -165,6 +176,7 @@ return view.extend({
 				editor.setSize('100%', '70vh');
 				editor.on('change', function() { editor.save(); });
 				window.addEventListener('resize', function() { editor.refresh(); });
+				editor.refresh();
 
 				function useTemplate() {
 					genTemplateConfig().then(function(content) {
@@ -223,7 +235,7 @@ return view.extend({
 							_('WARNING!!! no bin found apply config will not be test')), container);
 					}
 				});
-			}
+			});
 
 			return node;
 		});
