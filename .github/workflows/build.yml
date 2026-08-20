@@ -11,6 +11,10 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   build:
     name: build ${{ matrix.arch }}-${{ matrix.sdk }}
@@ -98,7 +102,7 @@ jobs:
       - name: Upload packages
         uses: ncipollo/release-action@v1.21.0
         with:
-          token: ${{ secrets.ACCESS_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: "release-assets/*"
           allowUpdates: true
           replacesArtifacts: true
@@ -107,7 +111,7 @@ jobs:
 
       - name: Delete workflow runs
         env:
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           WORKFLOW_NAME: ${{ github.workflow }}
           RETAIN_DAYS: "10"
@@ -139,7 +143,7 @@ jobs:
 
       - name: Remove old Releases
         env:
-          GH_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           KEEP: "60"
         run: |
