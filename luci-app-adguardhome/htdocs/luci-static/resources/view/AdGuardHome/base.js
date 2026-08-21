@@ -1,5 +1,4 @@
 'use strict';
-
 'require fs';
 'require uci';
 'require ui';
