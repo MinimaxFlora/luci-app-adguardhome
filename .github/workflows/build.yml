@@ -170,9 +170,6 @@ jobs:
           CONFIG_ALL_KMODS=n
           CONFIG_ALL=n
           CONFIG_AUTOREMOVE=n
-          # build luci-base first so po2lmo and the LuCI framework are available
-          CONFIG_PACKAGE_luci-base=y
-          # enable Simplified Chinese translations (luci-i18n-adguardhome-zh-cn)
           CONFIG_LUCI_LANG_zh_Hans=y
           CONFIG_PACKAGE_luci-app-adguardhome=m
           EOF
@@ -183,8 +180,6 @@ jobs:
       - name: Compile packages
         working-directory: sdk
         run: |
-          make package/luci-base/clean
-          make package/luci-base/compile -j"$(nproc)" V=s
           make package/luci-app-adguardhome/clean
           make package/luci-app-adguardhome/compile -j"$(nproc)" V=s
 
