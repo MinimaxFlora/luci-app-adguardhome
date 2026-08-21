@@ -162,6 +162,11 @@ jobs:
           sed -i -E "s/^(PKG_VERSION):=.*/\1:=${RELEASE_VERSION}/" sdk/package/luci-app-adguardhome/Makefile
           sed -i -E "s/^(PKG_RELEASE):=.*/\1:=1/" sdk/package/luci-app-adguardhome/Makefile
 
+          # The 25.12 immortalwrt SDK's luci feed ships its own luci-app-adguardhome
+          # (po/templates only, no zh_Hans), which collides with this repo's package
+          # and shadows it. Uninstall the feed copy so only our package is built.
+          (cd sdk && ./scripts/feeds uninstall luci-app-adguardhome) || true
+
       - name: Configure packages
         working-directory: sdk
         run: |
@@ -200,7 +205,7 @@ jobs:
           else
             find sdk/bin/packages -type f \
               \( -name "luci-app-adguardhome_*.ipk" \
-              -o -name "luci-i18n-adguardhome_*.ipk" \) \
+              -o -name "luci-i18n-adguardhome-*.ipk" \) \
               -exec cp -v {} "artifacts/${PACKAGE_FORMAT}/" \;
 
             app_count="$(find "artifacts/${PACKAGE_FORMAT}" -maxdepth 1 -type f -name "luci-app-adguardhome_*.ipk" | wc -l)"
