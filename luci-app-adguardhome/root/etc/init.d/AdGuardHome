@@ -470,22 +470,13 @@ reload_service()
 {
 	rm /var/run/AdGlucitest >/dev/null 2>&1
 	echo "AdGuardHome reloading"
-	config_load "${CONFIGURATION}"
-	config_get_bool enabled $CONFIGURATION enabled 0
-	if [ "$enabled" == "1" ]; then
-		# 轻量重启:绕过 stop_service(跳过备份和 redirect 清理,
-		# 避免 rpcd 保存并应用时同步等待 dnsmasq/firewall 重启)。
-		# procd 同名实例会直接替换运行中的进程;redirect 相关调整
-		# 由 start_service 末尾的后台任务 (sleep 5 && _do_redirect 1) 完成。
-		rc_procd start_service
-	else
-		# 停用:清理 redirect/crontab(跳过备份),然后必须显式删除
-		# procd 实例(不能写成 `stop nobackup` —— rc.common 会把
-		# nobackup 当作 instance 名传给 procd_kill,实例删不掉,
-		# 进程会继续运行)
-		stop_service nobackup
-		procd_kill "$CONFIGURATION"
-	fi
+	# 必须用 `start`(rc_procd start_service):procd_close_service "set"
+	# 是全量替换 —— enabled=1 时注册实例启动服务;enabled=0 时
+	# start_service 不注册实例,set 空实例 = 停止进程但保留服务注册
+	# 和 reload triggers。这样下次保存并应用时 config.change 事件
+	# 一定能触发 reload_service(若用 procd_kill 删除服务,procd 里
+	# 没有该服务,config.change 不再触发 reload,启用后无法启动)。
+	start
 }
 
 del_querylog(){

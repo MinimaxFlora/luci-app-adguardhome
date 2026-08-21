@@ -599,18 +599,33 @@ return view.extend({
 
 			/* 原版 base.lua 的 m.on_commit 会在 UCI commit 后显式
 			 * reload（io.popen "/etc/init.d/AdGuardHome reload &"）。
-			 * 必须保留这个显式 reload：rpcd uci apply 只向 procd 发
-			 * config.change 事件，而 procd 的 reload trigger 对"未注册
-			 * 实例"的服务（从未启动 / 更新内核时 stop 过 / 停用后
-			 * procd_kill 删除了实例）不生效 —— 只依赖 reload trigger
-			 * 会导致勾选启用并保存后服务不启动。
+			 * 必须保留显式 reload：rpcd uci apply 只向 procd 发
+			 * config.change 事件，而 procd 的 reload trigger 只对
+			 * "已注册到 procd"的服务生效 —— 服务从未启动 / 更新内核
+			 * 时被 stop / 停用过时，procd 里没有该服务，config.change
+			 * 不会触发 reload，只依赖 trigger 会导致启用后不启动。
 			 *
-			 * reload_service 已轻量化（rc_procd start_service 直接替换
-			 * 实例，不再 stop+start 带备份），所以这里的延迟 reload
-			 * 很快，不会拖慢保存并应用。 */
-			window.setTimeout(function() {
-				fs.exec('/etc/init.d/AdGuardHome', ['reload']).catch(function() {});
-			}, 3000);
+			 * 不能用固定 setTimeout：rpcd apply 是异步的，UCI 可能
+			 * 尚未提交，reload 会读到旧的 enabled 值，把刚启动的
+			 * 服务又停掉。改为轮询 UCI 直到 enabled 变成表单目标值
+			 * （即 rpcd 提交完成）再 reload。 */
+			var target = uci.get('AdGuardHome', 'AdGuardHome', 'enabled');
+			var tries = 0;
+
+			(function poll() {
+				tries++;
+				uci.load('AdGuardHome').then(function() {
+					var cur = uci.get('AdGuardHome', 'AdGuardHome', 'enabled');
+					if (cur === target || tries >= 20) {
+						fs.exec('/etc/init.d/AdGuardHome', ['reload']).catch(function() {});
+					}
+					else {
+						window.setTimeout(poll, 500);
+					}
+				}).catch(function() {
+					window.setTimeout(poll, 500);
+				});
+			})();
 		});
 	}
 });
