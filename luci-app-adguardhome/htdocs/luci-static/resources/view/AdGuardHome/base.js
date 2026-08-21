@@ -2,6 +2,7 @@
 
 'require fs';
 'require uci';
+'require ui';
 'require dom';
 'require poll';
 'require form';
@@ -589,6 +590,27 @@ return view.extend({
 				E('fieldset', { 'class': 'cbi-section' }, statusP),
 				node
 			]);
+		});
+	},
+
+	handleSaveApply: function(ev, mode) {
+		return this.handleSave(ev).then(function() {
+			ui.changes.apply(mode == '0');
+
+			/* 原版 base.lua 的 m.on_commit 会在 UCI commit 后显式
+			 * reload（io.popen "/etc/init.d/AdGuardHome reload &"）。
+			 * 必须保留这个显式 reload：rpcd uci apply 只向 procd 发
+			 * config.change 事件，而 procd 的 reload trigger 对"未注册
+			 * 实例"的服务（从未启动 / 更新内核时 stop 过 / 停用后
+			 * procd_kill 删除了实例）不生效 —— 只依赖 reload trigger
+			 * 会导致勾选启用并保存后服务不启动。
+			 *
+			 * reload_service 已轻量化（rc_procd start_service 直接替换
+			 * 实例，不再 stop+start 带备份），所以这里的延迟 reload
+			 * 很快，不会拖慢保存并应用。 */
+			window.setTimeout(function() {
+				fs.exec('/etc/init.d/AdGuardHome', ['reload']).catch(function() {});
+			}, 3000);
 		});
 	}
 });
